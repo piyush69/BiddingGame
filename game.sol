@@ -1,36 +1,14 @@
-pragma solidity ^0.4.21;
+xpragma solidity ^0.4.21;
 
 /**
- * The Owned contract ensures that only the creator (deployer) of a 
- * contract can perform certain tasks.
+ * The game contract accepts bids on teams and rewards the winner.
  */
-contract Owned
+contract game
 {
-	address public owner = msg.sender;
-	
-	event LogOwnerChanged(address indexed old, address indexed current);
-	
-	modifier only_owner
-	{
-		require(msg.sender == owner);
-		_;
-	}
-	
-	function setOwner(address _newOwner) only_owner public
-	{
-		LogOwnerChanged(owner, _newOwner);
-		owner = _newOwner;
-	}
-}
-
-/**
- * The game contract does this and that...
- */
-contract game is Owned
-{
-	uint public minBid;
+	uint public minBidWei;
 	uint public noOfTeams;
 	bool public acceptingBids;
+	address public admin;
 
 	mapping (address => bool) isInvited;
 	mapping (uint => address) bidderOnTeam;
@@ -43,15 +21,10 @@ contract game is Owned
 	event LogBidPlaced(address _newBidder, uint _newBid, uint _team);
 	event LogWinner(address _winner, uint _team);
 	
-	// add getters
-	function getMinBid () constant returns(uint res)
+	modifier only_admin
 	{
-		return minBid;
-	}
-
-	function getNoOfTeams () constant returns(uint res)
-	{
-		return noOfTeams;
+		require(msg.sender == admin);
+		_;
 	}
 
 	function getCurrentBidOnTeam (uint _team) constant returns(uint res)
@@ -60,20 +33,21 @@ contract game is Owned
 	}
 	
 
-	function game (uint _minBid, uint _noOfTeams)
+	function game (uint _minBidWei, uint _noOfTeams)
 	{
-		minBid = _minBid;
+		minBidWei = _minBidWei;
 		noOfTeams = _noOfTeams;
 		acceptingBids = true;
+		admin = msg.sender;
 	}
 	
-	function inviteBidder(address _bidder) only_owner
+	function inviteBidder(address _bidder) only_admin
 	{
 		isInvited[_bidder] = true;
 		LogBidderInvited(_bidder);
 	}
 
-	function closeBids() only_owner
+	function closeBids() only_admin
 	{
 		acceptingBids = false;
 		LogCloseBids();
@@ -83,11 +57,11 @@ contract game is Owned
 	{
 		require (acceptingBids);
 		require (isInvited[msg.sender]);
-		require (_team <= _noOfTeams && _team > 0);
+		require (_team <= noOfTeams && _team > 0);
 
 		if(bidderOnTeam[_team] == address(0)) // first bid
 		{
-			require (msg.value >= minBid);
+			require (msg.value >= minBidWei);
 		}
 		else // overtake
 		{
@@ -100,25 +74,28 @@ contract game is Owned
 		LogBidPlaced(msg.sender, msg.value, _team);
 	}
 	
-	function endGame (uint _winningTeam) only_owner
+	function endGame (uint _winningTeam) only_admin
 	{
 		require (!acceptingBids);
-		require (_winningTeam <= _noOfTeams && _winningTeam > 0);
+		require (_winningTeam <= noOfTeams && _winningTeam > 0);
 		
 		sendFunds95(bidderOnTeam[_winningTeam], address(this).balance);
 		// winner announced
-		LogWinner(bidderOnTeam[_winningTeam], uint _winningTeam);
-		selfdestruct(owner);
+		LogWinner(bidderOnTeam[_winningTeam], _winningTeam);
+		selfdestruct(admin);
 	}
 
 	function sendFunds95 (address _reciever, uint _value) internal
 	{
-		uint amount = (95 * _value) / 100;
-		_reciever.transfer(amount);
+		if(_reciever != address(0))
+		{
+			uint amount = (95 * _value) / 100;
+			_reciever.transfer(amount);
+		}
 	}
 
 	function()
 	{
 		revert();
-	}	
+	}  
 }
